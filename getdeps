@@ -1,0 +1,21 @@
+#!/bin/bash
+
+mkdir deps deps/include deps/lib
+
+git clone https://github.com/glfw/glfw 
+mkdir glfw/build
+cd glfw/build
+cmake -DCMAKE_INSTALL_PREFIX=../../deps ..
+make && make install 
+cd ../../
+rm -rf glfw
+
+git clone https://github.com/dav1dde/glad
+mkdir glad/build 
+cd glad/build
+cmake -DCMAKE_INSTALL_PREFIX=deps ..
+make 
+cp libglad.a ../../deps/lib/
+cp -r include ../../deps/
+cd ../../
+rm -rf glad 
