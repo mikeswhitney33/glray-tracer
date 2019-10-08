@@ -4,7 +4,8 @@ I=-Ideps/include
 GO=deps/src/glad.c
 
 main:
-	@$(CC) src/main.cpp $(I) $(L) -o bin/ray-tracer
+	@mkdir -p bin
+	@$(CC) src/*.cpp $(I) $(L) -o bin/ray-tracer
 
 clean:
 	@rm -rf bin/ray-tracer

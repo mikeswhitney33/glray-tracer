@@ -1,9 +1,22 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+
+#include <glm/glm.hpp>
+
+#include <cmath>
 #include <iostream>
+
+#include "headers/shader.hpp"
+#include "headers/camera.hpp"
+
+#define deg2rad(deg) deg * M_PI / 180.0f
 
 int screen_width = 800;
 int screen_height = 600;
+float deltaTime = 0;
+int sample_i = 0;
+
+Camera camera;
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void key_callback(GLFWwindow* window,  int key, int scancode, int action, int mods);
@@ -33,98 +46,99 @@ int main(int argc, char** argv) {
 
     // Buffers
     float vertices[] = {
-        -0.5f, -0.5f,
-        0.5f, -0.5f,
-        0.0f, 0.5f,
+        1.0f, 1.0f,
+        1.0f, -1.0f,
+        -1.0f, -1.0f,
+        -1.0f, 1.0f
     };
 
-    unsigned int VBO, VAO;
+    unsigned int indices[] = {
+        0, 1, 3,
+        1, 2, 3
+    };
+
+    unsigned int VBO, VAO, EBO;
     glGenVertexArrays(1, &VAO);
     glBindVertexArray(VAO);
 
     glGenBuffers(1, &VBO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    
+
+    glGenBuffers(1, &EBO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*) 0);
     glEnableVertexAttribArray(0);
 
-    // Shader
-    const char* vertexCode = "#version 330 core\n\
-    layout (location = 0) in vec2 aPos;\n\
-    void main() {\n\
-    gl_Position = vec4(aPos.x, aPos.y, 0.0, 1.0);\n\
-    }";
-    unsigned int vertexShader;
-    vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexCode, NULL);
-    glCompileShader(vertexShader);
-    {
-        int success;
-        char infoLog[512];
-        glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-        if(!success) {
-            glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-            std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
-            exit(EXIT_FAILURE);
-        }
+    Shader rtShader = Shader::FromFiles("src/shaders/rtvert.glsl", "src/shaders/rtfrag.glsl");
+    Shader scShader = Shader::FromFiles("src/shaders/texvert.glsl", "src/shaders/texfrag.glsl");
+    rtShader.use();
+    rtShader.setFloat("scale", tanf(deg2rad(60.0f) * 0.5f));
+    rtShader.setInt("tex", 0);
+
+    scShader.setInt("tex", 0);
+
+    unsigned int FBO;
+    glGenFramebuffers(1, &FBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, FBO);
+
+    unsigned int textureBuffer;
+    glGenTextures(1, &textureBuffer);
+    glBindTexture(GL_TEXTURE_2D, textureBuffer);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, screen_width, screen_height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureBuffer, 0);
+
+    if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+        exit(EXIT_FAILURE);
     }
-
-    const char* fragCode = "#version 330 core\n\
-    out vec4 FragColor;\n\
-    void main() {\n\
-    FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n\
-    }";
-    unsigned int fragShader;
-    fragShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragShader, 1, &fragCode, NULL);
-    glCompileShader(fragShader);
-    {
-        int success;
-        char infoLog[512];
-        glGetShaderiv(fragShader, GL_COMPILE_STATUS, &success);
-        if(!success) {
-            glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-            std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    unsigned int shaderProgram;
-    shaderProgram = glCreateProgram();
-
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragShader);
-    glLinkProgram(shaderProgram);
-    {
-        int success;
-        char infoLog[512];
-        glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-        if(!success) {
-            glGetShaderInfoLog(shaderProgram, 512, NULL, infoLog);
-            std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragShader);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 
+    sample_i = 0;
+
+
+    glBindFramebuffer(GL_FRAMEBUFFER, FBO);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    float lastFrame = 0;
 
     while(!glfwWindowShouldClose(window)) {
-        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
+        float time= glfwGetTime();
+        deltaTime = time - lastFrame;
+        lastFrame = time;
 
         // Render Code Here:
-        glUseProgram(shaderProgram);
+        glBindFramebuffer(GL_FRAMEBUFFER, FBO);
+        rtShader.use();
+        rtShader.setFloat("aspect", screen_width / (float) screen_height);
+        rtShader.setFloat("pixel_width", 1 / (float)screen_width);
+        rtShader.setFloat("pixel_height", 1 / (float)screen_height);
+        rtShader.setInt("sample_i", sample_i);
+        rtShader.setMat4("cam", camera.getViewMatrix());
+
+        sample_i++;
         glBindVertexArray(VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        scShader.use();
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
+    glDeleteFramebuffers(1, &FBO);
+    glDeleteVertexArrays(1, &VAO);
+    glDeleteBuffers(1, &VBO);
+    glDeleteBuffers(1, &EBO);
+
+    glfwDestroyWindow(window);
     glfwTerminate();
     exit(EXIT_SUCCESS);
 }
@@ -139,6 +153,10 @@ void key_callback(GLFWwindow* window,  int key, int scancode, int action, int mo
     if(action == GLFW_PRESS) {
         if(key == GLFW_KEY_Q || key == GLFW_KEY_ESCAPE) {
             glfwSetWindowShouldClose(window, true);
+        }
+        if(key == GLFW_KEY_W) {
+            camera.move(Camera::CameraDirection::FORWARD, deltaTime);
+            sample_i = 0;
         }
     }
 }
