@@ -11,8 +11,8 @@
 
 #define deg2rad(deg) deg * M_PI / 180.0f
 
-int screen_width = 800;
-int screen_height = 600;
+int screen_width = 1280;
+int screen_height = 720;
 float deltaTime = 0;
 int sample_i = 0;
 
@@ -183,13 +183,13 @@ void cursorpos_callback(GLFWwindow* window, double xpos, double ypos) {
     if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1)) {
         float dx = xpos - lastX;
         float dy = lastY - ypos;
-        
+
         camera.rotate(dx, dy);
         sample_i = 0;
     }
     lastX = xpos;
     lastY = ypos;
-    
+
 }
 
 void cursorenter_callback(GLFWwindow* window, int entered) {

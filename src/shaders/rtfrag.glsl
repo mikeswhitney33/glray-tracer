@@ -1,15 +1,13 @@
 #version 430 core
 
-#define NUM_SPHERES 3
-#define NUM_TRIANGLES 10
-#define NUM_MATERIALS 4
+#define NUM_MATERIALS 7
 #define NUM_POINT_LIGHTS 2
-#define HIT_NONE 0
-#define HIT_SPHERE 1
-#define HIT_TRIANGLE 2
-#define MAT_DIFF 0
-#define MAT_SPEC 1
-#define MAT_REFR 2
+#define NUM_SHAPES 13
+
+#define SHAPE_TRIANGLE 0
+#define SHAPE_SPHERE 1
+
+#define M_PI 3.141592654
 
 
 out vec4 FragColor;
@@ -26,17 +24,15 @@ uniform float pixel_height;
 uniform mat4 cam;
 
 struct Sphere {
-    int matID;
     vec3 center;
     float rad;
     float rad2;
 };
-Sphere makeSphere(int matID, vec3 center, float rad) {
-    return Sphere(matID, center, rad, rad*rad);
+Sphere makeSphere(vec3 center, float rad) {
+    return Sphere(center, rad, rad*rad);
 }
 
 struct Triangle {
-    int matID;
     vec3 A, B, C;
 };
 
@@ -44,8 +40,9 @@ struct Material {
     float ka, kd, ks;
     vec3 ia;
     float phong;
-    int MatType;
-    float eta;
+    float reflectance;
+    float transparency;
+    float diffusness;
 };
 
 struct PointLight {
@@ -53,33 +50,64 @@ struct PointLight {
     vec3 pos;
 };
 
-Triangle triangles[NUM_TRIANGLES];
-Sphere spheres[NUM_SPHERES];
+struct Shape {
+    int matID;
+    int shapeType;
+    Triangle triangle;
+    Sphere sphere;
+};
+
+Shape shapes[NUM_SHAPES];
+
 Material materials[NUM_MATERIALS];
 PointLight pointLights[NUM_POINT_LIGHTS];
 
+Triangle nullTriangle() {
+    return Triangle(vec3(0, 0, 0), vec3(0, 0, 0), vec3(0, 0, 0));
+}
+
+Sphere nullSphere() {
+    return Sphere(vec3(0, 0, 0), 0, 0);
+}
+
+Shape makeShape(int matID, Triangle tri) {
+    return Shape(matID, SHAPE_TRIANGLE, tri, nullSphere());
+}
+
+Shape makeShape(int matID, Sphere s) {
+    return Shape(matID, SHAPE_SPHERE, nullTriangle(), s);
+}
+
+void initShapes() {
+    // floor
+    shapes[0] = makeShape(4, Triangle(vec3(-0.5, -0.5, -0.5), vec3(-0.5, -0.5, 0.5), vec3(0.5, -0.5, 0.5)));
+    shapes[1] = makeShape(4, Triangle(vec3(-0.5, -0.5, -0.5), vec3(0.5, -0.5, -0.5), vec3(0.5, -0.5, 0.5)));
+    // back
+    shapes[2] = makeShape(1, Triangle(vec3(-0.5, -0.5, 0.5), vec3(-0.5, 0.5, 0.5), vec3(0.5, 0.5, 0.5)));
+    shapes[3] = makeShape(1, Triangle(vec3(-0.5, -0.5, 0.5), vec3(0.5, -0.5, 0.5), vec3(0.5, 0.5, 0.5)));
+    // left
+    shapes[4] = makeShape(5, Triangle(vec3(-0.5, -0.5, -0.5), vec3(-0.5, 0.5, -0.5), vec3(-0.5, 0.5, 0.5)));
+    shapes[5] = makeShape(5, Triangle(vec3(-0.5, -0.5, -0.5), vec3(-0.5, -0.5, 0.5), vec3(-0.5, 0.5, 0.5)));
+    // right
+    shapes[6] = makeShape(6, Triangle(vec3(0.5, -0.5, -0.5), vec3(0.5, 0.5, -0.5), vec3(0.5, 0.5, 0.5)));
+    shapes[7] = makeShape(6, Triangle(vec3(0.5, -0.5, -0.5), vec3(0.5, -0.5, 0.5), vec3(0.5, 0.5, 0.5)));
+    // ceiling
+    shapes[8] = makeShape(1, Triangle(vec3(-0.5, 0.5, -0.5), vec3(0.5, 0.5, -0.5), vec3(0.5, 0.5, 0.5)));
+    shapes[9] = makeShape(1, Triangle(vec3(-0.5, 0.5, -0.5), vec3(-0.5, 0.5, 0.5), vec3(0.5, 0.5, 0.5)));
+
+    shapes[10] = makeShape(0, makeSphere(vec3(0, -0.35, 0), 0.15));
+    shapes[11] = makeShape(2, makeSphere(vec3(-0.35, -0.35, 0.2), 0.15));
+    shapes[12] = makeShape(3, makeSphere(vec3(0.35, -0.35, -0.2), 0.15));
+}
+
 void initMaterials() {
-    materials[0] = Material(0.2, 0.2, 0.2, vec3(0.25, 0.25, 0.75), 32, MAT_DIFF, 1.03);
-    materials[1] = Material(0.2, 0.2, 0.2, vec3(0.75, 0.75, 0.75), 1, MAT_DIFF, 1.03);
-    materials[2] = Material(0.2, 0.2, 0.2, vec3(1, 1, 1), 32, MAT_SPEC, 1.03);
-    materials[3] = Material(0.2, 0.2, 0.2, vec3(1, 1, 1), 32, MAT_REFR, 1.03);
-}
-void initSpheres() {
-    spheres[0] = makeSphere(0, vec3(0, -0.35, 0), 0.15);
-    spheres[1] = makeSphere(2, vec3(-0.35, -0.35, 0.2), 0.15);
-    spheres[2] = makeSphere(3, vec3(0.35, -0.35, -0.2), 0.15);
-}
-void initTriangles() {
-    triangles[0] = Triangle(0, vec3(-0.5, -0.5, -0.5), vec3(-0.5, -0.5, 0.5), vec3(0.5, -0.5, 0.5));
-    triangles[1] = Triangle(0, vec3(-0.5, -0.5, -0.5), vec3(0.5, -0.5, -0.5), vec3(0.5, -0.5, 0.5));
-    triangles[2] = Triangle(1, vec3(-0.5, -0.5, 0.5), vec3(-0.5, 0.5, 0.5), vec3(0.5, 0.5, 0.5));
-    triangles[3] = Triangle(1, vec3(-0.5, -0.5, 0.5), vec3(0.5, -0.5, 0.5), vec3(0.5, 0.5, 0.5));
-    triangles[4] = Triangle(1, vec3(-0.5, -0.5, -0.5), vec3(-0.5, 0.5, -0.5), vec3(-0.5, 0.5, 0.5));
-    triangles[5] = Triangle(1, vec3(-0.5, -0.5, -0.5), vec3(-0.5, -0.5, 0.5), vec3(-0.5, 0.5, 0.5));
-    triangles[6] = Triangle(1, vec3(0.5, -0.5, -0.5), vec3(0.5, 0.5, -0.5), vec3(0.5, 0.5, 0.5));
-    triangles[7] = Triangle(1, vec3(0.5, -0.5, -0.5), vec3(0.5, -0.5, 0.5), vec3(0.5, 0.5, 0.5));
-    triangles[8] = Triangle(1, vec3(-0.5, 0.5, -0.5), vec3(0.5, 0.5, -0.5), vec3(0.5, 0.5, 0.5));
-    triangles[9] = Triangle(1, vec3(-0.5, 0.5, -0.5), vec3(-0.5, 0.5, 0.5), vec3(0.5, 0.5, 0.5));
+    materials[0] = Material(0.2, 0.2, 0.2, vec3(0.25, 0.25, 0.75), 32, 0, 0, 1);
+    materials[1] = Material(0.2, 0.2, 0.2, vec3(0.75, 0.75, 0.25), 1, 0, 0, 1);
+    materials[2] = Material(0.2, 0.2, 0.2, vec3(1, 1, 1), 32, 1, 0, 1);
+    materials[3] = Material(0.2, 0.2, 0.2, vec3(.7, .7, .7), 32, .3, .7, 0);
+    materials[4] = Material(0.2, 0.2, 0.2, vec3(.2, .7, .2), 32, .1, 0, 0);
+    materials[5] = Material(0.2, 0.2, 0.2, vec3(0.75, 0.25, 0.25), 1, .1, 0, 0);
+    materials[6] = Material(0.2, 0.2, 0.2, vec3(0.25, 0.25, 0.75), 1, .1, 0, 0);
 }
 
 void initPointLights() {
@@ -92,11 +120,11 @@ void initLights() {
 }
 
 void initScene() {
-    initSpheres();
-    initTriangles();
+    initShapes();
     initMaterials();
     initLights();
 }
+
 
 float noise(vec2 co){
     return 2 * fract(sin(dot(co.xy, vec2(12.9898,78.233))) * 43758.5453) - 1;
@@ -106,14 +134,13 @@ vec3 rolling_avg(vec3 avg, vec3 new_sample, int N) {
     return (new_sample + (N * avg)) / (N+1);
 }
 
-bool ray_sphere(vec3 orig, vec3 dir, vec3 center, float rad2, inout float t) {
-    // return false;
-    vec3 L = center - orig;
+bool intersect(vec3 orig, vec3 dir, Sphere s, inout float t) {
+    vec3 L = s.center - orig;
     float tca = dot(L, dir);
     if(tca < 0) return false;
     float d2 = dot(L, L) - tca * tca;
-    if(d2 > rad2) return false;
-    float thc = sqrt(rad2 - d2);
+    if(d2 > s.rad2) return false;
+    float thc = sqrt(s.rad2 - d2);
     float t0 = tca - thc;
     float t1 = tca + thc;
 
@@ -133,14 +160,14 @@ bool ray_sphere(vec3 orig, vec3 dir, vec3 center, float rad2, inout float t) {
     return true;
 }
 
-bool ray_triangle(vec3 orig, vec3 dir, vec3 A, vec3 B, vec3 C, inout float t) {
-    vec3 AB = B - A;
-    vec3 AC = C - A;
+bool intersect(vec3 orig, vec3 dir, Triangle tri, inout float t) {
+    vec3 AB = tri.B - tri.A;
+    vec3 AC = tri.C - tri.A;
     vec3 pvec = cross(dir, AC);
     float det = dot(AB, pvec);
     if(abs(det) < 0.0000001) return false;
     float invDet = 1 / det;
-    vec3 tvec = orig - A;
+    vec3 tvec = orig - tri.A;
     float u = dot(tvec, pvec) * invDet;
     if(u < 0 || u > 1) return false;
     vec3 qvec = cross(tvec, AB);
@@ -150,141 +177,164 @@ bool ray_triangle(vec3 orig, vec3 dir, vec3 A, vec3 B, vec3 C, inout float t) {
     if(tmpt > t || tmpt < 0) return false;
     t = tmpt;
 
-
     return true;
 }
 
-int intersectSpheres(vec3 orig, vec3 dir, inout float t, inout int hit) {
-    int ID = -1;
-    for(int i = 0;i < NUM_SPHERES;i++) {
-        Sphere s = spheres[i];
-        if(ray_sphere(orig, dir, s.center, s.rad2, t)) {
+bool intersect(vec3 orig, vec3 dir, Shape shape, inout float t) {
+    if(shape.shapeType == SHAPE_SPHERE) {
+        return intersect(orig, dir, shape.sphere, t);
+    }
+    else {
+        return intersect(orig, dir, shape.triangle, t);
+    }
+}
+
+bool intersect(vec3 orig, vec3 dir, inout float t, inout int ID) {
+    for(int i = 0;i < NUM_SHAPES;i++) {
+        if(intersect(orig, dir, shapes[i], t)) {
             ID = i;
         }
     }
-    if(ID > -1) {
-        hit = HIT_SPHERE;
-    }
-    return ID;
+    return ID > -1;
 }
 
-int intersectTriangles(vec3 orig, vec3 dir, inout float t, inout int hit) {
-    int ID = -1;
-    for(int i = 0;i < NUM_TRIANGLES;i++) {
-        Triangle tri = triangles[i];
-        if(ray_triangle(orig, dir, tri.A, tri.B, tri.C, t)) {
-            ID = i;
+
+vec3 getNormal(vec3 pt, Sphere s) {
+    return normalize(pt - s.center);
+}
+
+vec3 getNormal(vec3 dir, Triangle tri) {
+    vec3 AB = tri.B - tri.A;
+    vec3 AC = tri.C - tri.A;
+    vec3 n = normalize(cross(AB, AC));
+    if(dot(dir, n) > 0) {
+        n = -n;
+    }
+    return n;
+}
+
+vec3 getNormal(vec3 dir, vec3 pt, Shape s) {
+    if(s.shapeType == SHAPE_SPHERE) {
+        return getNormal(pt, s.sphere);
+    }
+    else {
+        return getNormal(dir, s.triangle);
+    }
+}
+
+
+vec3 getColor(vec3 pt, vec3 normal, vec3 V, Material mat) {
+    vec3 color_i = mat.ka * mat.ia;
+    for(int i = 0;i < NUM_POINT_LIGHTS;i++) {
+        PointLight light = pointLights[i];
+        vec3 shadow_orig = pt;
+        vec3 shadow_dir = normalize(light.pos - shadow_orig);
+        float shadowt = 10000000.0;
+        int shadow_ID = -1;
+        bool shadow_hit = intersect(shadow_orig + normal * 0.0001, shadow_dir, shadowt, shadow_ID);
+        vec3 shadowpt = shadow_orig + shadowt * shadow_dir;
+        if(!shadow_hit || distance(shadow_orig, light.pos) < distance(shadow_orig, shadowpt)) {
+            vec3 Lm = normalize(light.pos - pt);
+            vec3 Rm = normalize(reflect(-Lm, normal));
+
+            color_i += mat.kd * max(dot(Lm, normal), 0) * light.id + mat.ks * pow(max(dot(Rm, V), 0), mat.phong) * light.is;
         }
     }
-    if(ID > -1) {
-        hit = HIT_TRIANGLE;
-    }
-    return ID;
+    return color_i;
 }
 
-int intersectShapes(vec3 orig, vec3 dir, inout float t, inout int ID) {
-    int hit = HIT_NONE;
-    int tmpID = -1;
-    tmpID = intersectSpheres(orig, dir, t, hit);
-    if(hit == HIT_SPHERE) ID = tmpID;
-    tmpID = intersectTriangles(orig, dir, t, hit);
-    if(hit == HIT_TRIANGLE) ID = tmpID;
-    return hit;
+void getReflectionRay(vec3 pt, vec3 normal, inout vec3 orig, inout vec3 dir) {
+    dir = reflect(dir, normal);
+    dir += vec3(pixel_width*2 * noise(dir.xy * sample_i), pixel_height*2 * noise(dir.yx * sample_i), pixel_width*2 * noise(dir.xz * sample_i));
+
+    dir = normalize(dir);
+    orig = pt + dir * .000001;
 }
 
-vec3 getNormal(vec3 orig, vec3 dir, vec3 pt, int hit, int ID) {
-    if(hit == HIT_SPHERE) {
-        return normalize(pt - spheres[ID].center);
+void getRefractionRay(vec3 pt, vec3 normal, inout vec3 orig, inout vec3 dir) {
+    float eta1 = 1;
+    float eta2 = 1.003;
+
+    float n = dot(dir, normal) > 0 ? eta2 / eta1 : eta1 / eta2;
+    float cosI = -dot(normal, dir);
+    float sinT2 = n * n * (1.0 - cosI * cosI);
+    if(sinT2 > 1.0) {
+        dir = reflect(dir, normal);
     }
-    else if(hit == HIT_TRIANGLE) {
-        Triangle tri = triangles[ID];
-        vec3 AB = tri.B - tri.A;
-        vec3 AC = tri.C - tri.A;
-        vec3 n = normalize(cross(AB, AC));
-        if(dot(dir, n) > 0) {
-            n = -n;
-        }
-        return n;
+    else {
+        float cosT = sqrt(1.0 - sinT2);
+        dir = n * dir + (n * cosI - cosT) * -normal;
     }
-    return vec3(0, 0, 0);
+    dir = normalize(dir);
+    orig = pt + dir * 0.000001;
 }
 
-Material getMaterial(int hit, int ID) {
-    if(hit == HIT_SPHERE) {
-        return materials[spheres[ID].matID];
+void makeCoordinateSystem(vec3 N, inout vec3 Nt, inout vec3 Nb) {
+    if(abs(N.x) > abs(N.y)) {
+        Nt = vec3(N.z, 0, -N.x) / sqrt(N.x * N.x + N.z * N.z);
     }
-    else if(hit == HIT_TRIANGLE) {
-        return materials[triangles[ID].matID];
+    else {
+        Nt = vec3(0, -N.z, N.y) / sqrt(N.y * N.y + N.z * N.z);
     }
-    return materials[0];
+    Nb = cross(N, Nt);
+}
+
+vec3 uniformSampleHemisphere(float r1, float r2) {
+    float sinT = sqrt(1 - r1 * r1);
+    float phi = 2 * M_PI * r2;
+    float x = sinT * cos(phi);
+    float z = sinT * sin(phi);
+    return vec3(x, r1, z);
+}
+
+void getDiffuseRay(vec3 pt, vec3 normal, inout vec3 orig, inout vec3 dir) {
+    vec3 smp = uniformSampleHemisphere(noise(pt.xy * sample_i), noise(pt.yx * sample_i));
+    vec3 Nb, Nt;
+    makeCoordinateSystem(normal, Nt, Nb);
+    dir = vec3(
+        smp.x * Nb.x + smp.y * normal.x + smp.z * Nt.x,
+        smp.x * Nb.y + smp.y * normal.y + smp.z * Nt.y,
+        smp.x * Nb.z + smp.y * normal.z + smp.z * Nt.z
+    );
+    orig = pt + dir * 0.000001;
 }
 
 vec3 castRay(vec3 orig, vec3 dir, int depth) {
-    int depth_i = 0;
-    vec3 color = vec3(0, 0, 0);
-    float eta = 1.03;
-    while(depth_i < depth) {
-        float t = 10000000;
+    vec3 finalColor = vec3(0, 0, 0);
+    bool noHit = true;
+    float r = 1.0;
+    for(int i = 0;i < depth;i++) {
+        float t = 1000000.0;
         int ID = -1;
-        int hit = intersectShapes(orig, dir, t, ID);
-        if(hit == HIT_NONE) {
-            return color;
-        }
-        vec3 pt = orig + t * dir;
-        vec3 normal = getNormal(orig, dir, pt, hit, ID);
-        Material mat = getMaterial(hit, ID);
-        vec3 color_i = mat.ka * mat.ia;
-        vec3 V = normalize(orig - pt);
-        for(int i = 0;i < NUM_POINT_LIGHTS;i++) {
-            PointLight light = pointLights[i];
-            vec3 shadow_orig = pt;
-            vec3 shadow_dir = normalize(light.pos - shadow_orig);
-            float shadowt = 10000000.0;
-            int shadow_ID = -1;
-            int shadow_hit = intersectShapes(shadow_orig + normal * 0.0001, shadow_dir, shadowt, shadow_ID);
-            vec3 shadowpt = shadow_orig + shadowt * shadow_dir;
-            if(shadow_hit == HIT_NONE || distance(shadow_orig, light.pos) < distance(shadow_orig, shadowpt)) {
-                vec3 Lm = normalize(light.pos - pt);
-                vec3 Rm = normalize(reflect(-Lm, normal));
+        if(intersect(orig, dir, t, ID)) {
+            noHit = false;
+            vec3 pt = orig + dir * t;
+            vec3 normal = getNormal(dir, pt, shapes[ID]);
+            Material mat = materials[shapes[ID].matID];
+            vec3 color = getColor(pt, normal, -dir, mat);
+            finalColor += r * color;
 
-                color_i += mat.kd * max(dot(Lm, normal), 0) * light.id + mat.ks * pow(max(dot(Rm, V), 0), mat.phong) * light.is;
+            float p = noise(pt.xy * sample_i) * (mat.transparency + mat.reflectance + mat.diffusness);
+            if(p < mat.transparency) {
+                getRefractionRay(pt, normal, orig, dir);
+                r *= mat.transparency;
+            }
+            else if(p < mat.transparency + mat.reflectance) {
+                getReflectionRay(pt, normal, orig, dir);
+                r *= mat.reflectance;
+            }
+            else {
+                getDiffuseRay(pt, normal, orig, dir);
+                r *= mat.diffusness;
             }
         }
-        color = rolling_avg(color, color_i, depth_i);
-        if(mat.MatType == MAT_SPEC) {
-            orig = pt;
-            dir = reflect(dir, normal);
-            dir = vec3(
-                dir.x + pixel_width * noise(normal.xy * sample_i),
-                dir.y + pixel_height * noise(normal.yx * sample_i),
-                dir.z + pixel_width * noise(normal.xz * sample_i)
-            );
-            dir = normalize(dir);
-        }
-        else if(mat.MatType == MAT_REFR) {
-            // orig = pt - normal * 0.000001;
-            vec3 tdir = (dot(dir, normal) > 0) ? -dir : dir;
-            dir = refract(tdir, normal, mat.eta / eta);
-            dir = normalize(dir);
-            orig = pt + tdir * 0.00001;
-            eta = mat.eta;
-        }
-        else {
-            return color;
-        }
-        depth_i++;
-        // color = color + color_i / depth_i;
     }
-    
-    return color;
+    return noHit ? vec3(0, 0, 0) : finalColor;
 }
-
-
 
 void main() {
     initScene();
 
-    // vec3 orig = vec3(0, 0, -1);
     vec4 orig4 = cam * vec4(0, 0, 0, 1);
     vec3 orig = orig4.xyz / orig4.w;
     vec3 dir = vec3(
@@ -292,7 +342,6 @@ void main() {
         wDir.y * scale + pixel_height * noise(wDir.yx * sample_i),
         1
     );
-    // dir = (inverse(cam) * vec4(dir, 0)).xyz;
 
     vec3 color = castRay(orig, normalize(dir), 5);
     vec3 avg = texture(tex, uv).xyz;
