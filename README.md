@@ -2,7 +2,7 @@
 
 A ray tracer implemented in the fragment shader of modern opengl using C++
 
-# Dependences:
+## Dependences:
 * [GLFW](https://github.com/glfw/glfw)
 * [GLAD](https://github.com/Dav1dde/glad)
 * [GLM](https://github.com/g-truc/glm)
@@ -14,3 +14,4 @@ chmod +x getdeps
 ```
 So far this application only works on linux but I will take a look at extending it to other platforms.  Currently, the program produces this output in a GLFWwindow.
 <img src="traced-image.png">
+Once the program is running, you can interacti with it using the WASD keys and mouse scroller.

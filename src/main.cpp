@@ -181,7 +181,7 @@ void key_callback(GLFWwindow* window,  int key, int scancode, int action, int mo
 void cursorpos_callback(GLFWwindow* window, double xpos, double ypos) {
     // std::cout << xpos << "," << ypos << std::endl;
     if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1)) {
-        float dx = xpos - lastX;
+        float dx = lastX - xpos;
         float dy = lastY - ypos;
 
         camera.rotate(dx, dy);

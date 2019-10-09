@@ -1,25 +1,53 @@
 #!/bin/bash
 
-mkdir deps deps/include deps/lib
+mkdir -p deps deps/include deps/lib
 
-git clone https://github.com/glfw/glfw
-mkdir glfw/build
-cd glfw/build
-cmake -DCMAKE_INSTALL_PREFIX=../../deps ..
-make && make install
-cd ../../
-rm -rf glfw
+IGLFW=deps/include/GLFW
+LGLFW=deps/lib/libglfw3.a
+if [ -f "$LGLFW" ] && [ -d "$IGLFW" ]; then
+    echo "GLFW already present"
+else
+    echo "Getting GLFW"
+    git clone https://github.com/glfw/glfw > /dev/null 2>&1
+    mkdir glfw/build
+    cd glfw/build
+    echo "Building GLFW"
+    cmake -DCMAKE_INSTALL_PREFIX=../../deps .. > /dev/null 2>&1
+    make > /dev/null 2>&1
+    echo "Installing GLFW to deps"
+    make install > /dev/null 2>&1
+    cd ../../
+    rm -rf glfw
+fi
 
-git clone https://github.com/dav1dde/glad
-mkdir glad/build
-cd glad/build
-cmake -DCMAKE_INSTALL_PREFIX=deps ..
-make
-cp libglad.a ../../deps/lib/
-cp -r include ../../deps/
-cd ../../
-rm -rf glad
+IGLAD=deps/include/glad
+LGLAD=deps/lib/libglad.a
+if [ -f "$LGLAD" ] && [ -d "$IGLAD" ]; then
+    echo "GLAD already present"
+else
+    echo "Getting GLAD"
+    git clone https://github.com/dav1dde/glad > /dev/null 2>&1
+    mkdir glad/build
+    cd glad/build
+    echo "Building GLAD"
+    cmake -DCMAKE_INSTALL_PREFIX=deps .. > /dev/null 2>&1
+    make > /dev/null 2>&1
+    echo "Installing GLAD to deps"
+    cp libglad.a ../../deps/lib/
+    cp -r include ../../deps/
+    cd ../../
+    rm -rf glad
+fi
 
-git clone https://github.com/g-truc/glm
-cp -r glm/glm deps/include/
-rm -rf glm
+IGLM=deps/include/glm
+if [ -d "$IGLM" ]; then
+    echo "GLM already present"
+else
+    echo "Getting GLM"
+    git clone https://github.com/g-truc/glm > /dev/null 2>&1
+    echo "Installing GLM to deps"
+    cp -r glm/glm deps/include/
+    rm -rf glm
+fi
+
+echo "Dependencies are all set up"

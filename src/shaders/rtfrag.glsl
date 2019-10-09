@@ -101,13 +101,13 @@ void initShapes() {
 }
 
 void initMaterials() {
-    materials[0] = Material(0.2, 0.2, 0.2, vec3(0.25, 0.25, 0.75), 32, 0, 0, 1);
-    materials[1] = Material(0.2, 0.2, 0.2, vec3(0.75, 0.75, 0.25), 1, 0, 0, 1);
-    materials[2] = Material(0.2, 0.2, 0.2, vec3(1, 1, 1), 32, 1, 0, 1);
-    materials[3] = Material(0.2, 0.2, 0.2, vec3(.7, .7, .7), 32, .3, .7, 0);
-    materials[4] = Material(0.2, 0.2, 0.2, vec3(.2, .7, .2), 32, .1, 0, 0);
-    materials[5] = Material(0.2, 0.2, 0.2, vec3(0.75, 0.25, 0.25), 1, .1, 0, 0);
-    materials[6] = Material(0.2, 0.2, 0.2, vec3(0.25, 0.25, 0.75), 1, .1, 0, 0);
+    materials[0] = Material(0.2, 0.4, 0.2, vec3(0.25, 0.25, 0.75), 32, 0, 0, 1);
+    materials[1] = Material(0.2, 0.4, 0.2, vec3(0.75, 0.75, 0.25), 1, 0, 0, 1);
+    materials[2] = Material(0.2, 0.4, 0.2, vec3(1, 1, 1), 32, 1, 0, 1);
+    materials[3] = Material(0.2, 0.4, 0.2, vec3(.7, .7, .7), 32, .3, .7, 0);
+    materials[4] = Material(0.2, 0.4, 0.2, vec3(.2, .7, .2), 32, .1, 0, 0);
+    materials[5] = Material(0.2, 0.4, 0.2, vec3(0.75, 0.25, 0.25), 1, .1, 0, 0);
+    materials[6] = Material(0.2, 0.4, 0.2, vec3(0.25, 0.25, 0.75), 1, .1, 0, 0);
 }
 
 void initPointLights() {
@@ -224,7 +224,8 @@ vec3 getNormal(vec3 dir, vec3 pt, Shape s) {
 
 
 vec3 getColor(vec3 pt, vec3 normal, vec3 V, Material mat) {
-    vec3 color_i = mat.ka * mat.ia;
+    // vec3 color_i = mat.ka * mat.ia;
+    vec3 color_i = vec3(0, 0, 0);
     for(int i = 0;i < NUM_POINT_LIGHTS;i++) {
         PointLight light = pointLights[i];
         vec3 shadow_orig = pt;
@@ -237,7 +238,7 @@ vec3 getColor(vec3 pt, vec3 normal, vec3 V, Material mat) {
             vec3 Lm = normalize(light.pos - pt);
             vec3 Rm = normalize(reflect(-Lm, normal));
 
-            color_i += mat.kd * max(dot(Lm, normal), 0) * light.id + mat.ks * pow(max(dot(Rm, V), 0), mat.phong) * light.is;
+            color_i += mat.kd * max(dot(Lm, normal), 0) * mat.ia + mat.ks * pow(max(dot(Rm, V), 0), mat.phong) * light.is;
         }
     }
     return color_i;
@@ -340,8 +341,9 @@ void main() {
     vec3 dir = vec3(
         wDir.x * scale * aspect + pixel_width * noise(wDir.xy * sample_i),
         wDir.y * scale + pixel_height * noise(wDir.yx * sample_i),
-        1
+        -1
     );
+    dir = (cam * vec4(dir, 0)).xyz;
 
     vec3 color = castRay(orig, normalize(dir), 5);
     vec3 avg = texture(tex, uv).xyz;

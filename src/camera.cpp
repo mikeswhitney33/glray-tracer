@@ -46,10 +46,10 @@ void Camera::move(Camera::CameraDirection dir, float deltaTime) {
         wPos -= wFront * velocity;
         break;
     case RIGHT:
-        wPos -= wRight * velocity;
+        wPos += wRight * velocity;
         break;
     case LEFT:
-        wPos += wRight * velocity;
+        wPos -= wRight * velocity;
         break;
     case UP:
         wPos -= wUp * velocity;
