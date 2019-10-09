@@ -16,10 +16,15 @@ int screen_height = 600;
 float deltaTime = 0;
 int sample_i = 0;
 
+float lastX, lastY;
+
 Camera camera;
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void key_callback(GLFWwindow* window,  int key, int scancode, int action, int mods);
+void cursorpos_callback(GLFWwindow* window, double xpos, double ypos);
+void cursorenter_callback(GLFWwindow* window, int entered);
+void scroll_callback(GLFWwindow* window, double dx, double dy);
 
 int main(int argc, char** argv) {
     glfwInit();
@@ -43,6 +48,9 @@ int main(int argc, char** argv) {
     glViewport(0, 0, screen_width, screen_height);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetKeyCallback(window, key_callback);
+    glfwSetCursorPosCallback(window, cursorpos_callback);
+    glfwSetCursorEnterCallback(window, cursorenter_callback);
+    glfwSetScrollCallback(window, scroll_callback);
 
     // Buffers
     float vertices[] = {
@@ -150,13 +158,49 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
 }
 
 void key_callback(GLFWwindow* window,  int key, int scancode, int action, int mods) {
-    if(action == GLFW_PRESS) {
+    if(action == GLFW_PRESS || action == GLFW_REPEAT) {
+        sample_i = 0;
         if(key == GLFW_KEY_Q || key == GLFW_KEY_ESCAPE) {
             glfwSetWindowShouldClose(window, true);
         }
         if(key == GLFW_KEY_W) {
-            camera.move(Camera::CameraDirection::FORWARD, deltaTime);
-            sample_i = 0;
+            camera.move(Camera::CameraDirection::UP, deltaTime);
+        }
+        if(key == GLFW_KEY_S) {
+            camera.move(Camera::CameraDirection::DOWN, deltaTime);
+        }
+        if(key == GLFW_KEY_A) {
+            camera.move(Camera::CameraDirection::LEFT, deltaTime);
+        }
+        if(key == GLFW_KEY_D) {
+            camera.move(Camera::CameraDirection::RIGHT, deltaTime);
         }
     }
+}
+
+void cursorpos_callback(GLFWwindow* window, double xpos, double ypos) {
+    // std::cout << xpos << "," << ypos << std::endl;
+    if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1)) {
+        float dx = xpos - lastX;
+        float dy = lastY - ypos;
+        
+        camera.rotate(dx, dy);
+        sample_i = 0;
+    }
+    lastX = xpos;
+    lastY = ypos;
+    
+}
+
+void cursorenter_callback(GLFWwindow* window, int entered) {
+    // std::cout << "Entered" << std::endl;
+    double xpos, ypos;
+    glfwGetCursorPos(window, &xpos, &ypos);
+    lastX = xpos;
+    lastY = ypos;
+}
+
+void scroll_callback(GLFWwindow* window, double dx, double dy) {
+    camera.move(dy > 0 ? Camera::CameraDirection::FORWARD : Camera::CameraDirection::BACKWARD, deltaTime);
+    sample_i = 0;
 }

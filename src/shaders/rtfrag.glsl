@@ -1,12 +1,15 @@
 #version 430 core
 
-#define NUM_SPHERES 1
+#define NUM_SPHERES 3
 #define NUM_TRIANGLES 10
-#define NUM_MATERIALS 2
+#define NUM_MATERIALS 4
 #define NUM_POINT_LIGHTS 2
 #define HIT_NONE 0
 #define HIT_SPHERE 1
 #define HIT_TRIANGLE 2
+#define MAT_DIFF 0
+#define MAT_SPEC 1
+#define MAT_REFR 2
 
 
 out vec4 FragColor;
@@ -20,7 +23,6 @@ uniform int sample_i;
 uniform sampler2D tex;
 uniform float pixel_width;
 uniform float pixel_height;
-// uniform vec3 orig;
 uniform mat4 cam;
 
 struct Sphere {
@@ -42,6 +44,8 @@ struct Material {
     float ka, kd, ks;
     vec3 ia;
     float phong;
+    int MatType;
+    float eta;
 };
 
 struct PointLight {
@@ -55,11 +59,15 @@ Material materials[NUM_MATERIALS];
 PointLight pointLights[NUM_POINT_LIGHTS];
 
 void initMaterials() {
-    materials[0] = Material(0.2, 0.2, 0.2, vec3(0.25, 0.25, 0.75), 32);
-    materials[1] = Material(0.2, 0.2, 0.2, vec3(0.75, 0.75, 0.75), 1);
+    materials[0] = Material(0.2, 0.2, 0.2, vec3(0.25, 0.25, 0.75), 32, MAT_DIFF, 1.03);
+    materials[1] = Material(0.2, 0.2, 0.2, vec3(0.75, 0.75, 0.75), 1, MAT_DIFF, 1.03);
+    materials[2] = Material(0.2, 0.2, 0.2, vec3(1, 1, 1), 32, MAT_SPEC, 1.03);
+    materials[3] = Material(0.2, 0.2, 0.2, vec3(1, 1, 1), 32, MAT_REFR, 1.03);
 }
 void initSpheres() {
     spheres[0] = makeSphere(0, vec3(0, -0.35, 0), 0.15);
+    spheres[1] = makeSphere(2, vec3(-0.35, -0.35, 0.2), 0.15);
+    spheres[2] = makeSphere(3, vec3(0.35, -0.35, -0.2), 0.15);
 }
 void initTriangles() {
     triangles[0] = Triangle(0, vec3(-0.5, -0.5, -0.5), vec3(-0.5, -0.5, 0.5), vec3(0.5, -0.5, 0.5));
@@ -92,6 +100,10 @@ void initScene() {
 
 float noise(vec2 co){
     return 2 * fract(sin(dot(co.xy, vec2(12.9898,78.233))) * 43758.5453) - 1;
+}
+
+vec3 rolling_avg(vec3 avg, vec3 new_sample, int N) {
+    return (new_sample + (N * avg)) / (N+1);
 }
 
 bool ray_sphere(vec3 orig, vec3 dir, vec3 center, float rad2, inout float t) {
@@ -207,49 +219,82 @@ Material getMaterial(int hit, int ID) {
     return materials[0];
 }
 
-vec3 castRay(vec3 orig, vec3 dir) {
-    float t = 10000000;
-    int ID = -1;
-    int hit = intersectShapes(orig, dir, t, ID);
-    if(hit == HIT_NONE) {
-        return vec3(0, 0, 0);
-    }
-    vec3 pt = orig + t * dir;
-    vec3 normal = getNormal(orig, dir, pt, hit, ID);
-    Material mat = getMaterial(hit, ID);
-    vec3 color = mat.ka * mat.ia;
-    vec3 V = normalize(orig - pt);
-    for(int i = 0;i < NUM_POINT_LIGHTS;i++) {
-        PointLight light = pointLights[i];
-        vec3 shadow_orig = pt;
-        vec3 shadow_dir = normalize(light.pos - shadow_orig);
-        float shadowt = 10000000.0;
-        int shadow_ID = -1;
-        int shadow_hit = intersectShapes(shadow_orig + normal * 0.0001, shadow_dir, shadowt, shadow_ID);
-        vec3 shadowpt = shadow_orig + shadowt * shadow_dir;
-        if(shadow_hit == HIT_NONE || distance(shadow_orig, light.pos) < distance(shadow_orig, shadowpt)) {
-            vec3 Lm = normalize(light.pos - pt);
-            vec3 Rm = normalize(reflect(-Lm, normal));
-
-            color += mat.kd * max(dot(Lm, normal), 0) * light.id + mat.ks * pow(max(dot(Rm, V), 0), mat.phong) * light.is;
+vec3 castRay(vec3 orig, vec3 dir, int depth) {
+    int depth_i = 0;
+    vec3 color = vec3(0, 0, 0);
+    float eta = 1.03;
+    while(depth_i < depth) {
+        float t = 10000000;
+        int ID = -1;
+        int hit = intersectShapes(orig, dir, t, ID);
+        if(hit == HIT_NONE) {
+            return color;
         }
+        vec3 pt = orig + t * dir;
+        vec3 normal = getNormal(orig, dir, pt, hit, ID);
+        Material mat = getMaterial(hit, ID);
+        vec3 color_i = mat.ka * mat.ia;
+        vec3 V = normalize(orig - pt);
+        for(int i = 0;i < NUM_POINT_LIGHTS;i++) {
+            PointLight light = pointLights[i];
+            vec3 shadow_orig = pt;
+            vec3 shadow_dir = normalize(light.pos - shadow_orig);
+            float shadowt = 10000000.0;
+            int shadow_ID = -1;
+            int shadow_hit = intersectShapes(shadow_orig + normal * 0.0001, shadow_dir, shadowt, shadow_ID);
+            vec3 shadowpt = shadow_orig + shadowt * shadow_dir;
+            if(shadow_hit == HIT_NONE || distance(shadow_orig, light.pos) < distance(shadow_orig, shadowpt)) {
+                vec3 Lm = normalize(light.pos - pt);
+                vec3 Rm = normalize(reflect(-Lm, normal));
+
+                color_i += mat.kd * max(dot(Lm, normal), 0) * light.id + mat.ks * pow(max(dot(Rm, V), 0), mat.phong) * light.is;
+            }
+        }
+        color = rolling_avg(color, color_i, depth_i);
+        if(mat.MatType == MAT_SPEC) {
+            orig = pt;
+            dir = reflect(dir, normal);
+            dir = vec3(
+                dir.x + pixel_width * noise(normal.xy * sample_i),
+                dir.y + pixel_height * noise(normal.yx * sample_i),
+                dir.z + pixel_width * noise(normal.xz * sample_i)
+            );
+            dir = normalize(dir);
+        }
+        else if(mat.MatType == MAT_REFR) {
+            // orig = pt - normal * 0.000001;
+            vec3 tdir = (dot(dir, normal) > 0) ? -dir : dir;
+            dir = refract(tdir, normal, mat.eta / eta);
+            dir = normalize(dir);
+            orig = pt + tdir * 0.00001;
+            eta = mat.eta;
+        }
+        else {
+            return color;
+        }
+        depth_i++;
+        // color = color + color_i / depth_i;
     }
+    
     return color;
 }
 
-vec3 rolling_avg(vec3 avg, vec3 new_sample, int N) {
-    return (new_sample + (N * avg)) / (N+1);
-}
+
 
 void main() {
     initScene();
 
-    vec3 orig = (cam * vec4(vec3(0, 0, 0), 1)).xyz;
-    // vec3 orig = cam * vec4(vec3(0, 0, 0), 1).xyz;
-    vec3 dir = normalize(vec3(
-        (wDir.x + pixel_width * noise(wDir.xy*sample_i)) * scale * aspect,
-        (wDir.y + pixel_height * noise(wDir.yx*sample_i)) * scale, 1));
-    vec3 color = castRay(orig, dir);
+    // vec3 orig = vec3(0, 0, -1);
+    vec4 orig4 = cam * vec4(0, 0, 0, 1);
+    vec3 orig = orig4.xyz / orig4.w;
+    vec3 dir = vec3(
+        wDir.x * scale * aspect + pixel_width * noise(wDir.xy * sample_i),
+        wDir.y * scale + pixel_height * noise(wDir.yx * sample_i),
+        1
+    );
+    // dir = (inverse(cam) * vec4(dir, 0)).xyz;
+
+    vec3 color = castRay(orig, normalize(dir), 5);
     vec3 avg = texture(tex, uv).xyz;
 
     FragColor = vec4(rolling_avg(avg, color, sample_i), 1.0f);

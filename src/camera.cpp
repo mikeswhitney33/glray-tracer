@@ -13,6 +13,19 @@ glm::mat4 Camera::getViewMatrix() {
     return glm::lookAt(wPos, wPos + wFront, wUp);
 }
 
+glm::vec3 Camera::getFront() const {
+    return wFront;
+}
+glm::vec3 Camera::getPos() const {
+    return wPos;
+}
+glm::vec3 Camera::getUp() const {
+    return wUp;
+}
+glm::vec3 Camera::getRight() const {
+    return wRight;
+}
+
 void Camera::updateCameraVectors() {
     glm::vec3 front;
     front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
@@ -33,24 +46,27 @@ void Camera::move(Camera::CameraDirection dir, float deltaTime) {
         wPos -= wFront * velocity;
         break;
     case RIGHT:
-        wPos += wRight * velocity;
+        wPos -= wRight * velocity;
         break;
     case LEFT:
-        wPos -= wRight * velocity;
+        wPos += wRight * velocity;
+        break;
+    case UP:
+        wPos -= wUp * velocity;
+        break;
+    case DOWN:
+        wPos += wUp * velocity;
         break;
     }
 }
-// class Camera {
-// public:
-//     static const float YAW = -90.0f;
-//     static const float PITCH = 0.0f;
-//     static const float SPEED = 2.5f;
-//     static const float SENSITIVITY = 0.1f;
-//     static const float ZOOM = 45.0f;
 
-//     Camera(glm::vec3 pos, glm::vec3 up);
-//     glm::mat4 getViewMatrix();
-// private:
-//     float yaw, pitch, speed, sensitivity, zoom;
-//     void updateCameraVectors();
-// };
+void Camera::rotate(float dx, float dy) {
+    dx *= sensitivity;
+    dy *= sensitivity;
+    yaw += dx;
+    pitch += dy;
+
+    if(pitch > 89.0f) pitch = 89.0f;
+    if(pitch < -89.0f) pitch = -89.0f;
+    updateCameraVectors();
+}
