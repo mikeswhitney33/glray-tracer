@@ -96,15 +96,15 @@ void initShapes() {
     shapes[9] = makeShape(1, Triangle(vec3(-0.5, 0.5, -0.5), vec3(-0.5, 0.5, 0.5), vec3(0.5, 0.5, 0.5)));
 
     shapes[10] = makeShape(0, makeSphere(vec3(0, -0.35, 0), 0.15));
-    shapes[11] = makeShape(2, makeSphere(vec3(-0.35, -0.35, 0.2), 0.15));
-    shapes[12] = makeShape(3, makeSphere(vec3(0.35, -0.35, -0.2), 0.15));
+    shapes[11] = makeShape(2, makeSphere(vec3(0.35, -0.35, 0.0), 0.15));
+    shapes[12] = makeShape(3, makeSphere(vec3(-0.35, -0.35, -0.1), 0.15));
 }
 
 void initMaterials() {
     materials[0] = Material(0.2, 0.4, 0.2, vec3(0.25, 0.25, 0.75), 32, 0, 0, 1);
     materials[1] = Material(0.2, 0.4, 0.2, vec3(0.75, 0.75, 0.25), 1, 0, 0, 1);
     materials[2] = Material(0.2, 0.4, 0.2, vec3(1, 1, 1), 32, 1, 0, 1);
-    materials[3] = Material(0.2, 0.4, 0.2, vec3(.7, .7, .7), 32, .3, .7, 0);
+    materials[3] = Material(0.2, 0.4, 0.2, vec3(.7, .7, .7), 32, 0, 1, 0);
     materials[4] = Material(0.2, 0.4, 0.2, vec3(.2, .7, .2), 32, .1, 0, 0);
     materials[5] = Material(0.2, 0.4, 0.2, vec3(0.75, 0.25, 0.25), 1, .1, 0, 0);
     materials[6] = Material(0.2, 0.4, 0.2, vec3(0.25, 0.25, 0.75), 1, .1, 0, 0);
@@ -311,14 +311,44 @@ vec3 castRay(vec3 orig, vec3 dir, int depth) {
             noHit = false;
             vec3 pt = orig + dir * t;
             vec3 normal = getNormal(dir, pt, shapes[ID]);
+            vec3 nl = dot(normal, dir) < 0 ? normal : -normal;
             Material mat = materials[shapes[ID].matID];
             vec3 color = getColor(pt, normal, -dir, mat);
             finalColor += r * color;
 
             float p = noise(pt.xy * sample_i) * (mat.transparency + mat.reflectance + mat.diffusness);
             if(p < mat.transparency) {
-                getRefractionRay(pt, normal, orig, dir);
-                r *= mat.transparency;
+                bool into = dot(normal, nl) > 0;
+                float nc = 1, nt = 1.5, nnt = into ? nc / nt : nt / nc, ddn = dot(dir, nl);
+                float cos2t = 1 - nnt * nnt * (1 - ddn * ddn);
+                if(cos2t < 0) {
+                    getReflectionRay(pt, normal, orig, dir);
+                    r *= mat.transparency;
+                    continue;
+                }
+                vec3 tdir = normalize(dir * nnt - normal * ((into? 1 : -1) * (ddn * nnt + sqrt(cos2t))));
+                float a = nt - nc; 
+                float b = nt + nc;
+                float R0 = a * a / (b*b);
+                float c = 1 - (into? -ddn : dot(tdir,normal));
+                float Re = R0 + (1 - R0) * c * c * c * c * c;
+                float Tr = 1 - Re;
+                float P = .25 + .5 * Re;
+
+                // if(noise(tdir.xy * sample_i * depth) < P) {
+                //     getReflectionRay(pt, normal, orig, dir);
+                //     r *= mat.transparency;
+                // }
+                // else {
+                    dir = tdir;
+                    orig = pt;
+                    orig + dir * 0.000001;
+                    r *= mat.transparency;
+                // }
+                // getRefractionRay(pt, normal, orig, dir);
+                // Ray reflRay(x, r.d-n*2*n.dot(r.d));     // Ideal dielectric REFRACTION
+                
+                // r *= mat.transparency;
             }
             else if(p < mat.transparency + mat.reflectance) {
                 getReflectionRay(pt, normal, orig, dir);

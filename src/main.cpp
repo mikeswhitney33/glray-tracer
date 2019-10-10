@@ -11,8 +11,8 @@
 
 #define deg2rad(deg) deg * M_PI / 180.0f
 
-int screen_width = 1280;
-int screen_height = 720;
+int screen_width = 800;
+int screen_height = 600;
 float deltaTime = 0;
 int sample_i = 0;
 
