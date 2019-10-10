@@ -8,6 +8,127 @@
 #define SHAPE_SPHERE 1
 
 #define M_PI 3.141592654
+#define RAND_MAX pow(2, 31)
+
+//mt19937
+#define RK_STATE_LEN 624
+#define mt_N 624
+#define mt_M 397
+#define mt_MATRIX_A  0x9908b0dfU
+#define mt_UPPER_MASK 0x80000000U
+#define mt_LOWER_MASK 0x7fffffffU
+
+#extension GL_NV_gpu_shader5 : enable
+
+
+
+struct s_mt19937_state {
+    uint32_t key[RK_STATE_LEN];
+    int pos;
+};
+
+void mt19937_seed(inout s_mt19937_state state, uint32_t seed) {
+    int pos;
+    seed &= 0xffffffffU;
+    for(pos = 0;pos < RK_STATE_LEN;pos++) {
+        state.key[pos] = seed;
+        seed = (1812433253U * (seed ^ (seed >> 30)) + pos + 1) & 0xffffffffU;
+    }
+    state.pos = RK_STATE_LEN;
+}
+
+void init_genrand(inout s_mt19937_state state, uint32_t s) {
+    int mti;
+    // uint32_t state.key[RK_STATE_LEN] = state.key;
+    for(mti = 1; mti < RK_STATE_LEN;mti++) {
+        state.key[mti] = 1812433253U * (state.key[mti-1] ^ (state.key[mti-1] >> 30)) + mti;
+        state.key[mti] &= 0xffffffffUL;
+    }
+    state.pos = mti;
+}
+
+
+
+void mt19937_gen(inout s_mt19937_state state) {
+    uint32_t y;
+    int i;
+    for(i = 0;i < mt_N - mt_M;i++) {
+        y = (state.key[i] & mt_UPPER_MASK) | (state.key[i+1] & mt_LOWER_MASK);
+        state.key[i] = state.key[i+mt_M] ^ (y >> 1) ^ (-(y & 1) & mt_MATRIX_A);
+    }
+    for(; i < mt_N - 1;i++) {
+        y = (state.key[i] & mt_UPPER_MASK) | (state.key[i+1] & mt_LOWER_MASK);
+        state.key[i] = state.key[i + (mt_M - mt_N)] ^ (y >> 1) ^ (-(y&1)&mt_MATRIX_A);
+    }
+    y = (state.key[mt_N-1] & mt_UPPER_MASK) | (state.key[0] & mt_LOWER_MASK);
+    state.key[mt_N - 1] = state.key[mt_M - 1] ^ (y >> 1) ^ (-(y&1) & mt_MATRIX_A);
+
+    state.pos = 0;
+}
+
+uint32_t mt19937_next(inout s_mt19937_state state) {
+    uint32_t y;
+    if(state.pos == RK_STATE_LEN) {
+        mt19937_gen(state);
+    }
+    y = state.key[state.pos++];
+    y ^= (y>>11);
+    y ^= (y << 7) & 0x9d2c5680U;
+    y ^= (y << 15) & 0xefc60000U;
+    y ^= (y >> 18);
+    return y;
+}
+
+uint64_t mt19937_next64(inout s_mt19937_state state) {
+    return mt19937_next(state) << 32 | mt19937_next(state);
+}
+
+uint32_t mt_19937_next32(inout s_mt19937_state state) {
+    return uint32_t(mt19937_next(state));
+}
+
+double mt19937_next_double(inout s_mt19937_state state) {
+    uint64_t a = mt19937_next(state) >> 5, b = mt19937_next(state) >> 6;
+    return (double(a) * 67108864.0 + b) / 9007199254740992.0;
+}
+
+float mt19937_next_float(inout s_mt19937_state state) {
+    return float(mt19937_next_double(state));
+}
+
+s_mt19937_state state;
+
+
+
+
+
+
+
+// unsigned long next = mt_MATRIX_A;
+
+// unsigned long rand() {
+//     // next = (630360016 * next) % (long(pow(2, 31)) - 1);
+//     // return next;
+//     // next = next * 1103515245 + 12345;
+//     // return int(next / 65536) % 32768;
+// }
+void srand(uint32_t seed) {
+    mt19937_seed(state, seed);
+    // next = seed;
+}
+
+float randf() {
+    return mt19937_next_float(state);
+    // return sin(cos(rand())) / M_PI;
+    // return float(rand()) / float(RAND_MAX);
+    // return fract(sin(dot(normalize(vec2(rand(), rand())), vec2(12.9898,78.233))) * 43758.5453);
+
+}
+
+float randf(float max) {
+    return randf() * max;
+}
+
 
 
 out vec4 FragColor;
@@ -127,7 +248,9 @@ void initScene() {
 
 
 float noise(vec2 co){
-    return 2 * fract(sin(dot(co.xy, vec2(12.9898,78.233))) * 43758.5453) - 1;
+    return randf();
+    // return noise1(cos(sample_i));
+    // return 2 * fract(sin(dot(co.xy, vec2(12.9898,78.233))) * 43758.5453) - 1;
 }
 
 vec3 rolling_avg(vec3 avg, vec3 new_sample, int N) {
@@ -246,7 +369,7 @@ vec3 getColor(vec3 pt, vec3 normal, vec3 V, Material mat) {
 
 void getReflectionRay(vec3 pt, vec3 normal, inout vec3 orig, inout vec3 dir) {
     dir = reflect(dir, normal);
-    dir += vec3(pixel_width*2 * noise(dir.xy * sample_i), pixel_height*2 * noise(dir.yx * sample_i), pixel_width*2 * noise(dir.xz * sample_i));
+    dir += vec3(pixel_width*2 * randf(), pixel_height*2 * randf(), pixel_width*2 * randf());
 
     dir = normalize(dir);
     orig = pt + dir * .000001;
@@ -289,7 +412,7 @@ vec3 uniformSampleHemisphere(float r1, float r2) {
 }
 
 void getDiffuseRay(vec3 pt, vec3 normal, inout vec3 orig, inout vec3 dir) {
-    vec3 smp = uniformSampleHemisphere(noise(pt.xy * sample_i), noise(pt.yx * sample_i));
+    vec3 smp = uniformSampleHemisphere(randf(), randf());
     vec3 Nb, Nt;
     makeCoordinateSystem(normal, Nt, Nb);
     dir = vec3(
@@ -316,10 +439,11 @@ vec3 castRay(vec3 orig, vec3 dir, int depth) {
             vec3 color = getColor(pt, normal, -dir, mat);
             finalColor += r * color;
 
-            float p = noise(pt.xy * sample_i) * (mat.transparency + mat.reflectance + mat.diffusness);
+            float p = randf() * (mat.transparency + mat.reflectance + mat.diffusness);
             if(p < mat.transparency) {
                 bool into = dot(normal, nl) > 0;
                 float nc = 1, nt = 1.5, nnt = into ? nc / nt : nt / nc, ddn = dot(dir, nl);
+
                 float cos2t = 1 - nnt * nnt * (1 - ddn * ddn);
                 if(cos2t < 0) {
                     getReflectionRay(pt, normal, orig, dir);
@@ -327,29 +451,37 @@ vec3 castRay(vec3 orig, vec3 dir, int depth) {
                     continue;
                 }
                 vec3 tdir = normalize(dir * nnt - normal * ((into? 1 : -1) * (ddn * nnt + sqrt(cos2t))));
-                float a = nt - nc; 
-                float b = nt + nc;
-                float R0 = a * a / (b*b);
-                float c = 1 - (into? -ddn : dot(tdir,normal));
-                float Re = R0 + (1 - R0) * c * c * c * c * c;
-                float Tr = 1 - Re;
-                float P = .25 + .5 * Re;
+                dir = tdir;
+                orig = pt + dir * 0.00001;
+                // float a = nt - nc;
+                // float b = nt + nc;
+                // float R0 = a * a / (b*b);
+                // float c = 1 - (into? -ddn : dot(tdir,normal));
+                // float Re = R0 + (1 - R0) * c * c * c * c * c;
+                // float Tr = 1 - Re;
+                // float P = .25 + .5 * Re;
 
-                // if(noise(tdir.xy * sample_i * depth) < P) {
-                //     getReflectionRay(pt, normal, orig, dir);
+                // // if(noise(tdir.xy * sample_i * depth) < P) {
+                // //     getReflectionRay(pt, normal, orig, dir);
+                // //     r *= mat.transparency;
+                // // }
+                // // else {
+                //     dir = tdir;
+                //     orig = pt;
+                //     orig + dir * 0.0001;
+                //     // finalColor *= c;
                 //     r *= mat.transparency;
-                // }
-                // else {
-                    dir = tdir;
-                    orig = pt;
-                    orig + dir * 0.000001;
-                    r *= mat.transparency;
                 // }
                 // getRefractionRay(pt, normal, orig, dir);
                 // Ray reflRay(x, r.d-n*2*n.dot(r.d));     // Ideal dielectric REFRACTION
-                
+
                 // r *= mat.transparency;
+                // vec3 rdir = -dir;
+                // getRefractionRay(pt, normal, orig, dir);
+                // dir = rdir;
+                r *= mat.transparency;
             }
+            // else if(mat.reflectance == 1) {
             else if(p < mat.transparency + mat.reflectance) {
                 getReflectionRay(pt, normal, orig, dir);
                 r *= mat.reflectance;
@@ -364,13 +496,14 @@ vec3 castRay(vec3 orig, vec3 dir, int depth) {
 }
 
 void main() {
+    srand(sample_i);
     initScene();
 
     vec4 orig4 = cam * vec4(0, 0, 0, 1);
     vec3 orig = orig4.xyz / orig4.w;
     vec3 dir = vec3(
-        wDir.x * scale * aspect + pixel_width * noise(wDir.xy * sample_i),
-        wDir.y * scale + pixel_height * noise(wDir.yx * sample_i),
+        wDir.x * scale * aspect + pixel_width * randf(),
+        wDir.y * scale + pixel_height * randf(),
         -1
     );
     dir = (cam * vec4(dir, 0)).xyz;
