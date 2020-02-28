@@ -1,4 +1,4 @@
-#version 430 core
+#version 330 core
 
 #define NUM_MATERIALS 7
 #define NUM_POINT_LIGHTS 2
